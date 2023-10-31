@@ -18,7 +18,7 @@ pub const UniformType = enum {
 };
 pub const Program = struct {
     handle: raw.tfx_program,
-    pub inline fn create(src: []const u8, attribs: [*][]const u8, attrib_count: usize) anyerror!Program {
+    pub inline fn create(v_src: []const u8, f_src: []const u8,attribs: []const [*]const u8) anyerror!Program {
         // alternative...
         // pub inline fn create(src: []const u8, attribs: [*c][*c]const u8) anyerror!Program {
         // var attribs: [*c][*c]const u8 = &[_:null]?[*:0]const u8 {
@@ -26,7 +26,10 @@ pub const Program = struct {
         //     null
         // };
         // var handle = raw.tfx_program_len_new(src.ptr, @intCast(c_int, src.len), src.ptr, @intCast(c_int, src.len), attribs, -1)
-        var handle = raw.tfx_program_len_new(src.ptr, @intCast(c_int, src.len), src.ptr, @intCast(c_int, src.len), @ptrCast([*c][*c]const u8, attribs), @intCast(c_int, attrib_count));
+        const attrib_count = attribs.len;
+        var handle = raw.tfx_program_len_new(v_src.ptr, @intCast(v_src.len),
+        	f_src.ptr, @intCast(f_src.len),
+        	@ptrCast(@constCast(attribs)), @intCast(attrib_count));
         if (handle == 0) {
             return error.ShaderCompileFailure;
         }
@@ -36,12 +39,12 @@ pub const Program = struct {
 pub const Uniform = struct {
     handle: raw.tfx_uniform,
     pub inline fn create(name: [:0]const u8, utype: UniformType, count: i32) Uniform {
-        const real_type = switch (utype) {
-            .Int => @intToEnum(raw.tfx_uniform_type, raw.TFX_UNIFORM_INT),
-            .Vec4 => @intToEnum(raw.tfx_uniform_type, raw.TFX_UNIFORM_VEC4),
-            .Mat4 => @intToEnum(raw.tfx_uniform_type, raw.TFX_UNIFORM_MAT4),
+        const real_type: @TypeOf(raw.TFX_UNIFORM_IN) = switch (utype) {
+            .Int => @enumFromInt(raw.TFX_UNIFORM_INT),
+            .Vec4 => @enumFromInt(raw.TFX_UNIFORM_VEC4),
+            .Mat4 => @enumFromInt(raw.TFX_UNIFORM_MAT4),
         };
-        var handle = raw.tfx_uniform_new(name, real_type, @intCast(c_int, count));
+        var handle = raw.tfx_uniform_new(name, real_type, @intCast(count));
         return .{ .handle = handle };
     }
 };
@@ -54,8 +57,8 @@ pub const VertexFormat = struct {
         return VertexFormat{ .format = raw.tfx_vertex_format_start() };
     }
     pub inline fn add(self: *VertexFormat, slot: u8, count: usize, normalized: bool, component: ComponentType) void {
-        var real_type = switch (component) {
-            .Float => @intToEnum(raw.tfx_component_type, raw.TFX_TYPE_FLOAT),
+        var real_type:raw.tfx_component_type = switch (component) {
+            .Float => raw.TFX_TYPE_FLOAT,
         };
         raw.tfx_vertex_format_add(&self.format, slot, count, normalized, real_type);
     }
@@ -64,7 +67,7 @@ pub const VertexFormat = struct {
     }
 };
 pub const Buffer = raw.tfx_buffer;
-pub fn TransientBuffer(t: var) type {
+pub fn TransientBuffer(comptime t: type) type {
     return struct {
         ptr: [*]align(1) t,
         handle: raw.tfx_transient_buffer,
@@ -72,7 +75,7 @@ pub fn TransientBuffer(t: var) type {
             var tb = raw.tfx_transient_buffer_new(&fmt.format, count);
             return TransientBuffer(t){
                 .handle = tb,
-                .ptr = @ptrCast([*]align(1) t, tb.data),
+                .ptr = @ptrCast(tb.data),
             };
         }
     };
@@ -111,29 +114,30 @@ pub const TextureFlags = struct {
     pub const External = raw.TFX_TEXTURE_EXTERNAL;
 };
 pub const TextureFormat = struct {
-    pub const RGB565 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGB565);
-    pub const RGBA8 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGBA8);
-    pub const SRGB8 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_SRGB8);
-    pub const SRGB8_A8 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_SRGB8_A8);
-    pub const RGB10A2 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGB10A2);
-    pub const RG11B10F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RG11B10F);
-    pub const RGB16F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGB16F);
-    pub const RGBA16F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGBA16F);
-    pub const RGB565_D16 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGB565_D16);
-    pub const RGBA8_D16 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGBA8_D16);
-    pub const RGBA8_D24 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RGBA8_D24);
-    pub const R16F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_R16F);
-    pub const R32UI = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_R32UI);
-    pub const R32F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_R32F);
-    pub const RG16F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RG16F);
-    pub const RG32F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_RG32F);
-    pub const D16 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_D16);
-    pub const D24 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_D24);
-    pub const D32 = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_D32);
-    pub const D32F = @intToEnum(raw.tfx_format, raw.TFX_FORMAT_D32F);
+    pub const RGB565:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB565);
+    pub const RGBA8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8);
+    pub const SRGB8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_SRGB8);
+    pub const SRGB8_A8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_SRGB8_A8);
+    pub const RGB10A2:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB10A2);
+    pub const RG11B10F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG11B10F);
+    pub const RGB16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB16F);
+    pub const RGBA16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA16F);
+    pub const RGB565_D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB565_D16);
+    pub const RGBA8_D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8_D16);
+    pub const RGBA8_D24:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8_D24);
+    pub const R16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R16F);
+    pub const R32UI:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R32UI);
+    pub const R32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R32F);
+    pub const RG16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG16F);
+    pub const RG32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG32F);
+    pub const D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D16);
+    pub const D24:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D24);
+    pub const D32:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32);
+    pub const D32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32F); // raw.tfx_format, 
 };
+
 pub const PlatformData = struct {
-    pub inline fn create(gl_version: c_int, gl_get_proc_address: var) raw.tfx_platform_data {
+    pub inline fn create(gl_version: c_int, gl_get_proc_address: anytype ) raw.tfx_platform_data {  //@TypeOf(raw.tfx_platform_data.gl_get_proc_address)
         var pd = std.mem.zeroes(raw.tfx_platform_data);
         pd.context_version = gl_version;
         pd.gl_get_proc_address = gl_get_proc_address;
@@ -153,7 +157,7 @@ pub const View = struct {
         raw.tfx_view_set_name(self.id, name);
     }
     pub inline fn setFlags(self: *const View, flags: c_int) void {
-        raw.tfx_view_set_flags(self.id, @intToEnum(raw.tfx_view_flags, flags));
+        raw.tfx_view_set_flags(self.id, @enumFromInt(flags)); // raw.tfx_view_flags
     }
     pub inline fn setClearColor(self: *const View, color: u32) void {
         raw.tfx_view_set_clear_color(self.id, color);
@@ -162,10 +166,10 @@ pub const View = struct {
         raw.tfx_view_set_clear_depth(self.id, depth);
     }
     pub inline fn setCanvas(self: *const View, canvas: *raw.tfx_canvas, layer: i32) void {
-        raw.tfx_view_set_canvas(self.id, canvas, @intCast(c_int, layer));
+        raw.tfx_view_set_canvas(self.id, canvas, @intCast(layer));
     }
     pub inline fn setViewports(self: *const View, count: usize, viewports: [*][*]u16) void {
-        raw.tfx_view_set_viewports(self.id, @intCast(c_int, count), @ptrCast([*]?[*]u16, viewports));
+        raw.tfx_view_set_viewports(self.id, @intCast(count), @ptrCast(viewports)); // [*]?[*]u16
     }
 };
 
@@ -173,11 +177,11 @@ pub inline fn setPlatformData(pd: raw.tfx_platform_data) void {
     raw.tfx_set_platform_data(pd);
 }
 pub inline fn reset(w: u32, h: u32, flags: c_int) void {
-    raw.tfx_reset(@intCast(u16, w), @intCast(u16, h), @intToEnum(raw.tfx_reset_flags, flags));
+    raw.tfx_reset(@intCast(w), @intCast(h), @intCast(flags)); // raw.tfx_reset_flags,
 }
 pub const shutdown = raw.tfx_shutdown;
 pub const setBuffer = raw.tfx_set_buffer;
-pub inline fn setTransientBuffer(tb: var) void {
+pub inline fn setTransientBuffer(tb: anytype) void {
     raw.tfx_set_transient_buffer(tb.handle);
 }
 pub inline fn setTexture(uniform: *Uniform, tex: *raw.tfx_texture, slot: u8) void {
@@ -186,7 +190,7 @@ pub inline fn setTexture(uniform: *Uniform, tex: *raw.tfx_texture, slot: u8) voi
 pub const setState = raw.tfx_set_state;
 pub const setCallback = raw.tfx_set_callback;
 pub inline fn setUniform(uniform: *Uniform, data: [*]f32, count: i32) void {
-    raw.tfx_set_uniform(&uniform.handle, data, @intCast(c_int, count));
+    raw.tfx_set_uniform(&uniform.handle, data, @intCast(count));
 }
 pub inline fn submit(view: View, program: Program, retain: bool) void {
     return raw.tfx_submit(view.id, program.handle, retain);
