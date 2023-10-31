@@ -100,6 +100,13 @@ pub const State = struct {
     pub const Default = raw.TFX_STATE_DEFAULT;
     pub const RGBWrite = raw.TFX_STATE_RGB_WRITE;
     pub const DepthWrite = raw.TFX_STATE_DEPTH_WRITE;
+
+    pub const DrawPoints = raw.TFX_STATE_DRAW_POINTS;
+    pub const DrawLines = raw.TFX_STATE_DRAW_LINES;
+    pub const DrawLineStrip = raw.TFX_STATE_DRAW_LINE_STRIP;
+    pub const DrawLineLoop = raw.TFX_STATE_DRAW_LINE_LOOP;
+    pub const DrawTriStrip = raw.TFX_STATE_DRAW_TRI_STRIP;
+    pub const DrawTriFan = raw.TFX_STATE_DRAW_TRI_FAN;
 };
 pub const TextureFlags = struct {
     pub const FilterPoint = raw.TFX_TEXTURE_FILTER_POINT;
