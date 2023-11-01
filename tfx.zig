@@ -65,8 +65,24 @@ pub const VertexFormat = struct {
     pub inline fn end(self: *VertexFormat) void {
         raw.tfx_vertex_format_end(&self.format);
     }
+    pub inline fn get_stride(self: *VertexFormat) usize {
+        return self.format.stride;
+    }
 };
-pub const Buffer = raw.tfx_buffer;
+pub const F32Buffer = struct {
+     handle: raw.tfx_buffer,
+     pub fn create(data: []const f32, fmt: *VertexFormat, flags: raw.tfx_buffer_flags) F32Buffer {
+        return .{
+            .handle = raw.tfx_buffer_new(data.ptr, data.len * fmt.get_stride(), &fmt.format, flags)
+            } ;
+     }
+     pub fn update(self: *F32Buffer, offset:u32, data: []const f32) void {
+        raw.tfx_buffer_update(&self.handle, data.ptr, offset, @as(u32, @intCast(data.len * @sizeOf(f32))));
+     }
+     pub fn free(self: *F32Buffer) void {
+        raw.tfx_buffer_free(&self.handle);
+     }
+};
 pub fn TransientBuffer(comptime t: type) type {
     return struct {
         ptr: [*]align(1) t,
@@ -97,6 +113,9 @@ pub const ResetFlags = struct {
     pub const ReportGPUTimings = raw.TFX_RESET_REPORT_GPU_TIMINGS;
 };
 pub const State = struct {
+    pub const CullCW = raw.TFX_STATE_CULL_CW;
+    pub const CullCCW = raw.TFX_STATE_CULL_CCW;
+
     pub const Default = raw.TFX_STATE_DEFAULT;
     pub const RGBWrite = raw.TFX_STATE_RGB_WRITE;
     pub const DepthWrite = raw.TFX_STATE_DEPTH_WRITE;
@@ -141,6 +160,10 @@ pub const TextureFormat = struct {
     pub const D24:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D24);
     pub const D32:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32);
     pub const D32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32F); // raw.tfx_format, 
+};
+pub const BufferFlags = struct {
+    pub const Index32 = raw.TFX_BUFFER_INDEX_32;
+    pub const Mutable = raw.TFX_BUFFER_MUTABLE;
 };
 
 pub const PlatformData = struct {
@@ -187,7 +210,12 @@ pub inline fn reset(w: u32, h: u32, flags: c_int) void {
     raw.tfx_reset(@intCast(w), @intCast(h), @intCast(flags)); // raw.tfx_reset_flags,
 }
 pub const shutdown = raw.tfx_shutdown;
-pub const setBuffer = raw.tfx_set_buffer;
+pub fn setBuffer(buf: *const F32Buffer, slot: u8, write: bool) void {
+    raw.tfx_set_buffer(@constCast(&buf.handle), slot, write);
+}
+pub fn setVertices(buf: *const F32Buffer, count: u32) void {
+    raw.tfx_set_vertices(@constCast(&buf.handle), @intCast(count));
+}
 pub inline fn setTransientBuffer(tb: anytype) void {
     raw.tfx_set_transient_buffer(tb.handle);
 }
