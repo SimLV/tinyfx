@@ -39,10 +39,10 @@ pub const Program = struct {
 pub const Uniform = struct {
     handle: raw.tfx_uniform,
     pub inline fn create(name: [:0]const u8, utype: UniformType, count: i32) Uniform {
-        const real_type: @TypeOf(raw.TFX_UNIFORM_IN) = switch (utype) {
-            .Int => @enumFromInt(raw.TFX_UNIFORM_INT),
-            .Vec4 => @enumFromInt(raw.TFX_UNIFORM_VEC4),
-            .Mat4 => @enumFromInt(raw.TFX_UNIFORM_MAT4),
+        const real_type: raw.tfx_uniform_type = switch (utype) {
+            .Int => (raw.TFX_UNIFORM_INT),
+            .Vec4 => (raw.TFX_UNIFORM_VEC4),
+            .Mat4 => (raw.TFX_UNIFORM_MAT4),
         };
         var handle = raw.tfx_uniform_new(name, real_type, @intCast(count));
         return .{ .handle = handle };
