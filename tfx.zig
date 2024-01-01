@@ -10,11 +10,13 @@ pub const Debug = struct {
     pub const blit_rgba = raw.tfx_debug_blit_rgba;
     pub const blit_pal = raw.tfx_debug_blit_pal;
     pub const set_palette = raw.tfx_debug_set_palette;
+    pub const gl_message = raw.tfx_debug_gl_message;
 };
 pub const UniformType = enum {
     Int,
     Vec4,
     Mat4,
+    Texture,
 };
 pub const Program = struct {
     handle: raw.tfx_program,
@@ -43,9 +45,14 @@ pub const Uniform = struct {
             .Int => (raw.TFX_UNIFORM_INT),
             .Vec4 => (raw.TFX_UNIFORM_VEC4),
             .Mat4 => (raw.TFX_UNIFORM_MAT4),
+
+            .Texture => (raw.TFX_UNIFORM_INT),
         };
         var handle = raw.tfx_uniform_new(name, real_type, @intCast(count));
         return .{ .handle = handle };
+    }
+    pub inline fn setTexture(self: *Uniform, tex: *Texture, slot: u8) void {
+        raw.tfx_set_texture(&self.handle, &tex.data, slot);
     }
 };
 pub const ComponentType = enum {
@@ -73,7 +80,7 @@ pub const F32Buffer = struct {
      handle: raw.tfx_buffer,
      pub fn create(data: []const f32, fmt: *VertexFormat, flags: raw.tfx_buffer_flags) F32Buffer {
         return .{
-            .handle = raw.tfx_buffer_new(data.ptr, data.len * fmt.get_stride(), &fmt.format, flags)
+            .handle = raw.tfx_buffer_new(data.ptr, data.len * @sizeOf(f32), &fmt.format, flags)
             } ;
      }
      pub fn update(self: *F32Buffer, offset:u32, data: []const f32) void {
@@ -140,26 +147,26 @@ pub const TextureFlags = struct {
     pub const External = raw.TFX_TEXTURE_EXTERNAL;
 };
 pub const TextureFormat = struct {
-    pub const RGB565:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB565);
-    pub const RGBA8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8);
-    pub const SRGB8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_SRGB8);
-    pub const SRGB8_A8:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_SRGB8_A8);
-    pub const RGB10A2:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB10A2);
-    pub const RG11B10F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG11B10F);
-    pub const RGB16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB16F);
-    pub const RGBA16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA16F);
-    pub const RGB565_D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGB565_D16);
-    pub const RGBA8_D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8_D16);
-    pub const RGBA8_D24:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RGBA8_D24);
-    pub const R16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R16F);
-    pub const R32UI:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R32UI);
-    pub const R32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_R32F);
-    pub const RG16F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG16F);
-    pub const RG32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_RG32F);
-    pub const D16:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D16);
-    pub const D24:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D24);
-    pub const D32:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32);
-    pub const D32F:raw.tfx_format = @enumFromInt(raw.TFX_FORMAT_D32F); // raw.tfx_format, 
+    pub const RGB565:raw.tfx_format = raw.TFX_FORMAT_RGB565;
+    pub const RGBA8:raw.tfx_format = raw.TFX_FORMAT_RGBA8;
+    pub const SRGB8:raw.tfx_format = raw.TFX_FORMAT_SRGB8;
+    pub const SRGB8_A8:raw.tfx_format = raw.TFX_FORMAT_SRGB8_A8;
+    pub const RGB10A2:raw.tfx_format = raw.TFX_FORMAT_RGB10A2;
+    pub const RG11B10F:raw.tfx_format = raw.TFX_FORMAT_RG11B10F;
+    pub const RGB16F:raw.tfx_format = raw.TFX_FORMAT_RGB16F;
+    pub const RGBA16F:raw.tfx_format = raw.TFX_FORMAT_RGBA16F;
+    pub const RGB565_D16:raw.tfx_format = raw.TFX_FORMAT_RGB565_D16;
+    pub const RGBA8_D16:raw.tfx_format = raw.TFX_FORMAT_RGBA8_D16;
+    pub const RGBA8_D24:raw.tfx_format = raw.TFX_FORMAT_RGBA8_D24;
+    pub const R16F:raw.tfx_format = raw.TFX_FORMAT_R16F;
+    pub const R32UI:raw.tfx_format = raw.TFX_FORMAT_R32UI;
+    pub const R32F:raw.tfx_format = raw.TFX_FORMAT_R32F;
+    pub const RG16F:raw.tfx_format = raw.TFX_FORMAT_RG16F;
+    pub const RG32F:raw.tfx_format = raw.TFX_FORMAT_RG32F;
+    pub const D16:raw.tfx_format = raw.TFX_FORMAT_D16;
+    pub const D24:raw.tfx_format = raw.TFX_FORMAT_D24;
+    pub const D32:raw.tfx_format = raw.TFX_FORMAT_D32;
+    pub const D32F:raw.tfx_format = raw.TFX_FORMAT_D32F;
 };
 pub const BufferFlags = struct {
     pub const Index32 = raw.TFX_BUFFER_INDEX_32;
@@ -219,13 +226,22 @@ pub fn setVertices(buf: *const F32Buffer, count: u32) void {
 pub inline fn setTransientBuffer(tb: anytype) void {
     raw.tfx_set_transient_buffer(tb.handle);
 }
-pub inline fn setTexture(uniform: *Uniform, tex: *raw.tfx_texture, slot: u8) void {
-    raw.tfx_set_texture(&uniform.handle, tex, slot);
-}
 pub const setState = raw.tfx_set_state;
 pub const setCallback = raw.tfx_set_callback;
-pub inline fn setUniform(uniform: *Uniform, data: [*]f32, count: i32) void {
-    raw.tfx_set_uniform(&uniform.handle, data, @intCast(count));
+pub inline fn setUniform(uniform: *Uniform, data: anytype) void {
+    const Type = @TypeOf(data);
+    switch (Type) {
+        i32 => {
+            raw.tfx_set_uniform_int(&uniform.handle, &data, 1);
+            },
+        f32 => raw.tfx_set_uniform(&uniform.handle, &data, 1),
+        [4]f32 => raw.tfx_set_uniform(&uniform.handle, data[0..].ptr, 1),
+        else =>
+        {
+            var msg: [256]u8 = undefined;
+            @panic(std.fmt.bufPrintZ(&msg, "Unexpected {}", .{Type}) catch unreachable);
+        }
+    }
 }
 pub inline fn submit(view: View, program: Program, retain: bool) void {
     return raw.tfx_submit(view.id, program.handle, retain);
@@ -239,3 +255,27 @@ pub inline fn getView(viewid: u8) View {
 pub inline fn frame() raw.tfx_stats {
     return raw.tfx_frame();
 }
+pub const Texture = struct {
+    data: raw.tfx_texture,
+
+    pub inline fn create(w: u16, h: u16, layers: u16, data:[*]u8, format: raw.tfx_format, flags:u16) @This() {
+        var raw_data = data;
+        return @This(){ .data = raw.tfx_texture_new(w, h, layers, raw_data, format, flags) };
+    }
+
+    pub inline fn create_empty(w: u16, h: u16, layers: u16, format: raw.tfx_format, flags:u16) @This() {
+        return @This(){ .data = raw.tfx_texture_new(w, h, layers, null, format, flags) };
+    }
+
+    pub inline fn free(self: *@This()) void {
+        raw.tfx_texture_free(&self.data);
+    }
+
+    pub fn update(self: *@This(), data:[*]u8) void {
+        raw.tfx_texture_update(&self.data, data);
+    }
+
+    pub fn partialUpdate(self: *@This(), x: u16, y: u16, width: u16, height: u16, data:[]u8) void {
+        raw.tfx_texture_update_partial(&self.data, x, y, width, height, data.ptr);
+    }
+};

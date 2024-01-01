@@ -25,6 +25,10 @@ BGFX is excellent, but we have different priorities and scope.
 2. Add the location of `tinyfx.h` (and `tinyfx.hpp` if you use the C++ API) to your include paths
 3. `#include <tinyfx.h>` or `#include <tinyfx.hpp>` and start using tfx after creating an OpenGL context (GLFW and SDL are good for this!). Remember to call `tfx_set_platform_data` with your target GL version first!
 
+## Bugs
+
+- tfx_update_buffer could be called only once per frame
+
 ## Examples
 
 Hello Triangle (`examples/01-triangle.c`)

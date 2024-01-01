@@ -300,6 +300,7 @@ TFX_API void tfx_debug_blit_pal(const int x, const int y, const int w, const int
 // note: doesn't copy! make sure to keep this palette in memory yourself.
 // pass NULL to reset to default palette. expects ABGR input.
 TFX_API void tfx_debug_set_palette(const uint32_t *palette);
+TFX_API void tfx_debug_gl_message(const char *msg);
 
 TFX_API void tfx_set_platform_data(tfx_platform_data pd);
 
@@ -322,6 +323,7 @@ TFX_API void tfx_buffer_free(tfx_buffer *buf);
 
 TFX_API tfx_texture tfx_texture_new(uint16_t w, uint16_t h, uint16_t layers, const void *data, tfx_format format, uint16_t flags);
 TFX_API void tfx_texture_update(tfx_texture *tex, const void *data);
+TFX_API void tfx_texture_update_partial(tfx_texture *tex, uint16_t x, uint16_t y, uint16_t width, uint16_t height, const void *data);
 TFX_API void tfx_texture_free(tfx_texture *tex);
 TFX_API tfx_texture tfx_get_texture(tfx_canvas *canvas, uint8_t index);
 

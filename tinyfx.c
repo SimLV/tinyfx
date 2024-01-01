@@ -1641,6 +1641,7 @@ typedef struct tfx_buffer_params {
 	uint32_t offset;
 	uint32_t size;
 	const void *update_data;
+	struct tfx_buffer_params *next;
 } tfx_buffer_params;
 
 static tfx_buffer *get_internal_buffer(tfx_buffer *buf) {
@@ -1658,14 +1659,21 @@ void tfx_buffer_update(tfx_buffer *buf, const void *data, uint32_t offset, uint3
 	assert((buf->flags & TFX_BUFFER_MUTABLE) == TFX_BUFFER_MUTABLE);
 	assert(size > 0);
 	assert(data != NULL);
-	tfx_buffer_params *params = buf->internal;
-	if (!buf->internal) {
+	tfx_buffer *base = get_internal_buffer(buf);
+	tfx_buffer_params *params = base->internal;
+	if (!base->internal) {
 		params = calloc(1, sizeof(tfx_buffer_params));
+		params->next = 0;
 	}
+	else
+	{
+		params = calloc(1, sizeof(tfx_buffer_params));
+		params->next = base->internal;
+	}
+	base->internal = params;
 	params->update_data = data;
 	params->offset = offset;
 	params->size = size;
-	get_internal_buffer(buf)->internal = params;
 }
 
 void tfx_buffer_free(tfx_buffer *buf) {
@@ -1690,6 +1698,9 @@ typedef struct tfx_texture_params {
 	GLenum format;
 	GLenum internal_format;
 	GLenum type;
+
+	uint16_t upd_x, upd_y;
+	uint16_t upd_width, upd_height;
 	const void *update_data;
 } tfx_texture_params;
 
@@ -1844,6 +1855,7 @@ tfx_texture tfx_texture_new(uint16_t w, uint16_t h, uint16_t layers, const void 
 	}
 
 	CHECK(tfx_glGenTextures(t.gl_count, t.gl_ids));
+
 	bool aniso = (g_flags & TFX_RESET_MAX_ANISOTROPY) == TFX_RESET_MAX_ANISOTROPY;
 	bool reserve_mips = (flags & TFX_TEXTURE_RESERVE_MIPS) == TFX_TEXTURE_RESERVE_MIPS;
 	bool gen_mips = (flags & TFX_TEXTURE_GEN_MIPS) == TFX_TEXTURE_GEN_MIPS;
@@ -1995,7 +2007,32 @@ tfx_texture tfx_texture_new(uint16_t w, uint16_t h, uint16_t layers, const void 
 void tfx_texture_update(tfx_texture *tex, const void *data) {
 	assert((tex->flags & TFX_TEXTURE_CPU_WRITABLE) == TFX_TEXTURE_CPU_WRITABLE);
 	tfx_texture_params *internal = tex->internal;
+	internal->upd_x = 0;
+	internal->upd_y = 0;
+	internal->upd_width = tex->width;
+	internal->upd_height = tex->height;
 	internal->update_data = data;
+}
+
+void tfx_texture_update_partial(tfx_texture *tex, uint16_t x, uint16_t y, uint16_t width, uint16_t height, const void *data) {
+	assert((tex->flags & TFX_TEXTURE_CPU_WRITABLE) == TFX_TEXTURE_CPU_WRITABLE);
+	tfx_texture_params *internal = tex->internal;
+	if ((x < tex->width) && (y < tex->height))
+	{
+		if (x + width > tex->width)
+		{
+			width = tex->width - x;
+		}
+		if (y + height > tex->height)
+		{
+			height = tex->height - y;
+		}
+		internal->upd_x = x;
+		internal->upd_y = y;
+		internal->upd_width = width;
+		internal->upd_height = height;
+		internal->update_data = data;
+	}
 }
 
 void tfx_texture_free(tfx_texture *tex) {
@@ -3067,6 +3104,11 @@ void tfx_debug_print(const int baserow, const int basecol, const uint16_t bg_fg,
 	}
 }
 
+void tfx_debug_gl_message(const char *msg)
+{
+	tfx_glInsertEventMarkerEXT(0, msg);
+}
+
 tfx_stats tfx_frame() {
 	assert(did_you_call_tfx_reset);
 
@@ -3137,7 +3179,14 @@ tfx_stats tfx_frame() {
 	for (int i = 0; i < nbb; i++) {
 		tfx_buffer *buf = &g_buffers[i];
 		tfx_buffer_params *params = (tfx_buffer_params*)buf->internal;
-		if (params) {
+		while (params) {
+#ifdef DEBUG_BUFFER_OPERATIONS
+			char tmp[64];
+			sprintf(tmp, "buf(%d, %p, %d)", buf->gl_id, params?params->update_data:0, params?params->size:0);
+			tfx_glInsertEventMarkerEXT(0, tmp);
+			fprintf(stderr, "tfx: tfx_frame upd_buffer: %p s:%d\n", params?params->update_data:0, params?params->size:0);
+#endif
+
 			CHECK(tfx_glBindBuffer(GL_ARRAY_BUFFER, buf->gl_id));
 			if (tfx_glMapBufferRange && tfx_glUnmapBuffer) {
 				void *ptr = tfx_glMapBufferRange(GL_ARRAY_BUFFER, params->offset, params->size, GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
@@ -3150,9 +3199,13 @@ tfx_stats tfx_frame() {
 				CHECK(tfx_glBufferData(GL_ARRAY_BUFFER, params->size, NULL, GL_DYNAMIC_DRAW));
 				CHECK(tfx_glBufferSubData(GL_ARRAY_BUFFER, params->offset, params->size, params->update_data));
 			}
-			free(params);
-			buf->internal = NULL;
+
+			tfx_buffer_params *next;
+			next = params;
+			params = params->next;
+			free(next);
 		}
+		buf->internal = NULL;
 	}
 
 	int nt = sb_count(g_textures);
@@ -3163,11 +3216,12 @@ tfx_stats tfx_frame() {
 			assert((tex->flags & TFX_TEXTURE_CUBE) != TFX_TEXTURE_CUBE);
 			// spin the buffer id before updating
 			tex->gl_idx = (tex->gl_idx + 1) % tex->gl_count;
+
 			tfx_glBindTexture(GL_TEXTURE_2D, tex->gl_ids[tex->gl_idx]);
 			if (tfx_glInvalidateTexSubImage && !g_platform_data.use_gles) {
-				tfx_glInvalidateTexSubImage(tex->gl_ids[tex->gl_idx], 0, 0, 0, 0, tex->width, tex->height, 1);
+				tfx_glInvalidateTexSubImage(tex->gl_ids[tex->gl_idx], 0, internal->upd_x, internal->upd_y, 0, internal->upd_width, internal->upd_height, 1);
 			}
-			tfx_glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tex->width, tex->height, internal->format, internal->type, internal->update_data);
+			tfx_glTexSubImage2D(GL_TEXTURE_2D, 0, internal->upd_x, internal->upd_y, internal->upd_width, internal->upd_height, internal->format, internal->type, internal->update_data);
 			internal->update_data = NULL;
 		}
 	}
@@ -3178,7 +3232,7 @@ tfx_stats tfx_frame() {
 		size_t overlay_size = g_debug_overlay.height * pitch;
 		memset(g_debug_data, 0, overlay_size);
 	}
-
+	tfx_glInsertEventMarkerEXT(0, "fin");
 	pop_group();
 
 	char debug_label[256];
@@ -3596,6 +3650,7 @@ tfx_stats tfx_frame() {
 		}
 
 #define CHANGED(diff, mask) ((diff & mask) != 0)
+		// Drawing stuff
 
 		uint64_t last_flags = 0;
 		for (int i = 0; i < nd; i++) {
@@ -3839,7 +3894,7 @@ tfx_stats tfx_frame() {
 
 			sb_free(draw.uniforms);
 			draw.uniforms = NULL;
-		}
+		} // for each draw
 
 #undef CHANGED
 
@@ -3851,7 +3906,7 @@ tfx_stats tfx_frame() {
 
 		sb_free(view->blits);
 		view->blits = NULL;
-	}
+	} // for each view
 
 	pop_group();
 
